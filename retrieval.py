@@ -114,6 +114,11 @@ class WarpModule(torch.nn.Module):
 
 
 def main():
+    os.environ["RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "5394"
+
     if world_size >= 1:
         distributed.init_process_group(backend="nccl")
 
