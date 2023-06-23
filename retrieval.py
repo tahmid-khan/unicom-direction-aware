@@ -52,6 +52,10 @@ parser.add_argument("--reprob", type=float, default=0.25, help="The probability 
 parser.add_argument("--remode", type=str, default="pixel", help="The mode of replacement to use during training when using CutOut.")
 parser.add_argument("--recount", type=int, default=1, help="")
 
+parser.add_argument("--ours", action="store_true", help="Use the direction-aware metric")
+parser.add_argument("--alpha", type=float, default=1.0, help="The scale factor of the Euclidean component of the direction-aware metric")
+parser.add_argument("--beta", type=float, default=1.0, help="The scale factor of the angular component of the direction-aware metric")
+
 
 args = parser.parse_args()
 
@@ -339,15 +343,17 @@ def euclidean_distance(x, y, topk=2):
 
 
 @torch.no_grad()
-def our_distance(x: torch.Tensor, y: torch.Tensor, topk=2) -> torch.Tensor:
+def our_distance(
+    x: torch.Tensor, y: torch.Tensor, alpha: float = 1, beta: float = 1, topk: int = 2
+) -> torch.Tensor:
     m, n = x.size(dim=0), y.size(dim=0)
     xx = x.square().sum(dim=1, keepdim=True).expand(m, n)
     yy = y.square().sum(dim=1, keepdim=True).expand(n, m).t()
     x_dot_y = x @ y.t()
     sq_euclid_dist = xx + yy - 2 * x_dot_y
     cosine_sim = x_dot_y / (xx * yy).sqrt()
-    dist = sq_euclid_dist + 1 - cosine_sim
-    dist = torch.clamp(dist, min=1e-12).sqrt()
+    dist = alpha * sq_euclid_dist + beta * (1 - cosine_sim)
+    dist = dist.clamp(min=1e-12).sqrt()
     return torch.topk(dist, topk, largest=False)
 
 
@@ -379,7 +385,11 @@ def get_metric(
                 end = num_feat
                 is_end = 1
 
-            _, index_pt = our_distance(query[idx:end], query)
+            if args.ours:
+                _, index_pt = our_distance(query[idx:end], query, args.alpha, args.beta)
+            else:
+                _, index_pt = euclidean_distance(query[idx:end], query)
+
             index_np = index_pt.cpu().numpy()[:, 1]
             list_pred.append(index_np)
             idx += 128
@@ -411,9 +421,12 @@ def get_metric(
                 end = num_feat
                 is_end = 1
 
-            _, index_pt = our_distance(query[idx:end], gallery)
-            index_np = index_pt.cpu().numpy()[:, 0]
+            if args.ours:
+                _, index_pt = our_distance(query[idx:end], gallery, args.alpha, args.beta)
+            else:
+                _, index_pt = euclidean_distance(query[idx:end], gallery)
 
+            index_np = index_pt.cpu().numpy()[:, 0]
             list_pred.append(index_np)
             idx += 128
         query_label = np.array(query_label).reshape(num_feat)
