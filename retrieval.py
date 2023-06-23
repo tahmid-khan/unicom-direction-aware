@@ -352,8 +352,8 @@ def our_distance(
     x_dot_y = x @ y.t()
     sq_euclid_dist = xx + yy - 2 * x_dot_y
     cosine_sim = x_dot_y / (xx * yy).sqrt()
-    dist = alpha * sq_euclid_dist + beta * (1 - cosine_sim)
-    dist = dist.clamp(min=1e-12).sqrt()
+    dist = alpha * sq_euclid_dist / x.size(dim=1) + beta * (1 - cosine_sim)
+    # dist = dist.clamp(min=1e-12).sqrt()
     return torch.topk(dist, topk, largest=False)
 
 
