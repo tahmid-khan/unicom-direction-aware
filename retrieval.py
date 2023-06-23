@@ -339,6 +339,19 @@ def euclidean_distance(x, y, topk=2):
 
 
 @torch.no_grad()
+def our_distance(x: torch.Tensor, y: torch.Tensor, topk=2) -> torch.Tensor:
+    m, n = x.size(dim=0), y.size(dim=0)
+    xx = x.square().sum(dim=1, keepdim=True).expand(m, n)
+    yy = y.square().sum(dim=1, keepdim=True).expand(n, m).t()
+    x_dot_y = x @ y.t()
+    sq_euclid_dist = xx + yy - 2 * x_dot_y
+    cosine_sim = x_dot_y / (xx * yy).sqrt()
+    dist = sq_euclid_dist + 1 - cosine_sim
+    dist = torch.clamp(dist, min=1e-12).sqrt()
+    return torch.topk(dist, topk, largest=False)
+
+
+@torch.no_grad()
 def get_metric(
         query: torch.Tensor,
         query_label: list,
@@ -366,7 +379,7 @@ def get_metric(
                 end = num_feat
                 is_end = 1
 
-            _, index_pt = euclidean_distance(query[idx:end], query)
+            _, index_pt = our_distance(query[idx:end], query)
             index_np = index_pt.cpu().numpy()[:, 1]
             list_pred.append(index_np)
             idx += 128
@@ -398,7 +411,7 @@ def get_metric(
                 end = num_feat
                 is_end = 1
 
-            _, index_pt = euclidean_distance(query[idx:end], gallery)
+            _, index_pt = our_distance(query[idx:end], gallery)
             index_np = index_pt.cpu().numpy()[:, 0]
 
             list_pred.append(index_np)
